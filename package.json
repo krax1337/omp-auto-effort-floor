@@ -1,0 +1,17 @@
+{
+  "name": "omp-auto-effort-floor",
+  "version": "0.1.0",
+  "description": "Minimum reasoning effort for omp's auto thinking mode",
+  "type": "module",
+  "license": "MIT",
+  "author": "krax1337",
+  "repository": "github:krax1337/omp-auto-effort-floor",
+  "keywords": ["omp", "omp-plugin", "thinking", "effort"],
+  "files": ["src/index.ts", "README.md"],
+  "omp": {
+    "extensions": ["./src/index.ts"]
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}
