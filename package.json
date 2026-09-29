@@ -1,6 +1,6 @@
 {
   "name": "omp-auto-effort-floor",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Minimum reasoning effort for omp's auto thinking mode",
   "type": "module",
   "license": "MIT",
