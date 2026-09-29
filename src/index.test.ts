@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { applyFloor, autoActive, parseFloor } from "./index";
+import { applyFloor, autoActive, parseFloor, sentEffort } from "./index";
 
 describe("applyFloor", () => {
 	test("raises Anthropic effort below floor", () => {
@@ -65,4 +65,12 @@ test("parseFloor", () => {
 	expect(parseFloor(" HIGH ")).toBe("high");
 	expect(parseFloor("off")).toBeUndefined();
 	expect(parseFloor("bogus")).toBe("medium");
+});
+
+test("sentEffort reads each wire shape and ignores payloads without effort", () => {
+	expect(sentEffort({ output_config: { effort: "medium" } })).toBe("medium");
+	expect(sentEffort({ reasoning: { effort: "high" } })).toBe("high");
+	expect(sentEffort({ reasoning_effort: "low" })).toBe("low");
+	expect(sentEffort({ thinking: { type: "adaptive" } })).toBeUndefined();
+	expect(sentEffort(undefined)).toBeUndefined();
 });

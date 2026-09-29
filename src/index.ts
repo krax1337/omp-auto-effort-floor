@@ -65,12 +65,38 @@ export function applyFloor(payload: unknown, floor: Level): EffortChange | undef
 	);
 }
 
+/** The effort a provider payload will actually send, across the supported wire shapes. */
+export function sentEffort(payload: unknown): string | undefined {
+	if (!payload || typeof payload !== "object") return undefined;
+	const p = payload as Record<string, unknown>;
+	for (const [holder, key] of [
+		[p.output_config, "effort"],
+		[p.reasoning, "effort"],
+		[p, "reasoning_effort"],
+	] as const) {
+		if (holder && typeof holder === "object" && key in holder) {
+			const value = (holder as Record<string, unknown>)[key];
+			if (typeof value === "string") return value;
+		}
+	}
+	return undefined;
+}
+
+/** Status-line text: the effort sent, plus the classifier's pick when the floor raised it. */
+export function statusText(sent: string, change: EffortChange | undefined): string {
+	return change ? `effort sent: ${sent} (auto picked ${change.from})` : `effort sent: ${sent}`;
+}
+
+const STATUS_KEY = "auto-effort-floor";
+
 export default function autoEffortFloor(pi: ExtensionAPI): void {
 	let floor = parseFloor(process.env.OMP_AUTO_EFFORT_FLOOR);
 
 	pi.on("before_provider_request", (event, ctx) => {
-		if (!floor || !autoActive(ctx.sessionManager)) return undefined;
-		const change = applyFloor(event.payload, floor);
+		const change = floor && autoActive(ctx.sessionManager) ? applyFloor(event.payload, floor) : undefined;
+		const sent = sentEffort(event.payload);
+		// The built-in status shows the classifier's pick, which can differ from the wire; show the wire.
+		if (sent && ctx.hasUI) ctx.ui.setStatus(STATUS_KEY, statusText(sent, change));
 		if (!change) return undefined;
 		pi.logger.debug("auto-effort-floor: raised effort", { ...change, model: ctx.model?.id });
 		return event.payload;

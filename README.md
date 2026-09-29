@@ -34,8 +34,12 @@ It only raises an effort that is already on the request, so it never adds a fiel
 
 To tell whether auto is active, it reads the latest `thinking_level_change` entry on the session branch and checks for `configured: "auto"`.
 
+## Status line
+
+omp's thinking indicator shows the level the auto classifier picked, which can differ from what is actually sent. The plugin adds its own status item with the effort from the last outgoing request, for example `effort sent: medium (auto picked low)` when the floor raised it, or `effort sent: medium` otherwise. It needs `statusLine.showHookStatus` (on by default).
+
 ## Limits
 
 - Google/Gemini `thinkingConfig` and budget-only providers are left unchanged.
-- The status line still shows the level the classifier chose. The floor applies on the wire.
+- omp's built-in thinking indicator is unchanged. Use the `effort sent` status item to see what went out.
 - `ultrathink` and the `autoThinkingMaxEffort` ceiling behave as before.
