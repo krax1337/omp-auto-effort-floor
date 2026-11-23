@@ -37,32 +37,53 @@ export function autoActive(sessionManager: Pick<ExtensionContext["sessionManager
 
 type EffortChange = { from: Level; to: Level };
 
-/** Raises `holder[key]` to `floor` when it holds a known level below it. */
-function raiseField(holder: unknown, key: string, floor: Level): EffortChange | undefined {
-	if (!holder || typeof holder !== "object" || !(key in holder)) return undefined;
-	const record = holder as Record<string, unknown>;
-	const current = record[key];
-	if (!isLevel(current) || rank(current) >= rank(floor)) return undefined;
-	record[key] = floor;
-	return { from: current, to: floor };
-}
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+	value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
 
 /**
- * Mutates the effort field in place for the wire shapes omp emits:
- * - Anthropic Messages: `output_config.effort` (adaptive / budget-effort Claude models)
- * - OpenAI Responses / Codex: `reasoning.effort`
+ * Mutates the effort fields in place for the wire shapes omp emits:
+ * - Anthropic Messages: `output_config.effort`, top-level and on `messages[]` entries
+ * - OpenAI Responses / Codex: `reasoning.effort`, top-level and on `configuration_update` items in `input[]`
  * - OpenAI-compatible chat: `reasoning_effort`
- * Only raises an effort already present, so the required betas/flags are already on the request.
+ *
+ * Models with in-conversation effort control (Claude 5.x, GPT-6.x) keep the top-level field at the
+ * conversation's first effort and send every later change as a history entry, so the last field in
+ * request order is the one in force. Every field is raised, not only that one: history rewritten
+ * differently from the previous request would change the prompt cache prefix.
+ *
+ * Only raises efforts already present, so the required betas/flags are already on the request.
+ * Returns the change to the effort in force, if the floor raised it.
  */
 export function applyFloor(payload: unknown, floor: Level): EffortChange | undefined {
-	if (!payload || typeof payload !== "object") return undefined;
-	const p = payload as Record<string, unknown>;
+	const p = asRecord(payload);
+	if (!p) return undefined;
 	// Anthropic has no `minimal`; its lowest wire effort is `low`.
-	return (
-		raiseField(p.output_config, "effort", floor === "minimal" ? "low" : floor) ??
-		raiseField(p.reasoning, "effort", floor) ??
-		raiseField(p, "reasoning_effort", floor)
-	);
+	const anthropicFloor = floor === "minimal" ? "low" : floor;
+	let inForce: EffortChange | undefined;
+	/** Raises `holder[key]` when it holds a known level below `level`. The last field present is the one in force. */
+	const raise = (holder: unknown, key: string, level: Level): void => {
+		const record = asRecord(holder);
+		if (!record || !(key in record)) return;
+		const current = record[key];
+		inForce = undefined;
+		if (!isLevel(current) || rank(current) >= rank(level)) return;
+		record[key] = level;
+		inForce = { from: current, to: level };
+	};
+
+	raise(p.output_config, "effort", anthropicFloor);
+	if (Array.isArray(p.messages)) {
+		for (const message of p.messages) raise(asRecord(message)?.output_config, "effort", anthropicFloor);
+	}
+	raise(p.reasoning, "effort", floor);
+	if (Array.isArray(p.input)) {
+		for (const item of p.input) {
+			const update = asRecord(item);
+			if (update?.type === "configuration_update") raise(update.reasoning, "effort", floor);
+		}
+	}
+	raise(p, "reasoning_effort", floor);
+	return inForce;
 }
 
 export default function autoEffortFloor(pi: ExtensionAPI): void {
@@ -71,8 +92,7 @@ export default function autoEffortFloor(pi: ExtensionAPI): void {
 	pi.on("before_provider_request", (event, ctx) => {
 		if (!floor || !autoActive(ctx.sessionManager)) return undefined;
 		const change = applyFloor(event.payload, floor);
-		if (!change) return undefined;
-		pi.logger.debug("auto-effort-floor: raised effort", { ...change, model: ctx.model?.id });
+		if (change) pi.logger.debug("auto-effort-floor: raised effort", { ...change, model: ctx.model?.id });
 		return event.payload;
 	});
 

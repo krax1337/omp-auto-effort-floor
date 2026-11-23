@@ -24,11 +24,13 @@ Levels: `minimal` `low` `medium` `high` `xhigh` `max`, or `off` to disable. Runn
 
 ## How it works
 
-The extension hooks `before_provider_request` and rewrites the effort field on these wire formats:
+The extension hooks `before_provider_request` and rewrites the effort fields on these wire formats:
 
-- Anthropic Messages: `output_config.effort`. Anthropic has no `minimal`, so its effective floor is `low`.
-- OpenAI Responses / Codex: `reasoning.effort`
+- Anthropic Messages: `output_config.effort`, at the top level and on `messages[]` entries. Anthropic has no `minimal`, so its effective floor is `low`.
+- OpenAI Responses / Codex: `reasoning.effort`, at the top level and on `configuration_update` items in `input[]`
 - OpenAI-compatible chat: `reasoning_effort`
+
+Newer models (Claude 5.x, GPT-6.x) take effort changes inside the conversation: omp keeps the top-level field at the conversation's first effort and sends each later change as a history entry. The extension raises every effort field in the request, so the one in force is at or above the floor and the rewritten history is identical from one request to the next.
 
 It only raises an effort that is already on the request, so it never adds a field the provider would reject.
 
@@ -39,3 +41,4 @@ To tell whether auto is active, it reads the latest `thinking_level_change` entr
 - Google/Gemini `thinkingConfig` and budget-only providers are left unchanged.
 - The status line still shows the level the classifier chose. The floor applies on the wire.
 - `ultrathink` and the `autoThinkingMaxEffort` ceiling behave as before.
+- Changing the floor mid-session, or pinning a level after auto, changes effort fields that were already sent. Expect one prompt-cache miss on the next request.

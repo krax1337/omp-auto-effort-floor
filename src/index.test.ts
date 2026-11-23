@@ -42,6 +42,41 @@ describe("applyFloor", () => {
 		expect(applyFloor(payload, "medium")).toBeUndefined();
 		expect(payload.reasoning.effort).toBe("none");
 	});
+
+	test("raises a per-message effort below the floor when the top-level one is pinned higher", () => {
+		const control = { role: "system", content: [], output_config: { effort: "low" } };
+		const payload = {
+			output_config: { effort: "high" },
+			messages: [{ role: "user", content: "a" }, control, { role: "user", content: "b" }],
+		};
+		expect(applyFloor(payload, "medium")).toEqual({ from: "low", to: "medium" });
+		expect(payload.output_config.effort).toBe("high");
+		expect(control.output_config.effort).toBe("medium");
+	});
+
+	test("rewrites superseded efforts too, but reports only the one in force", () => {
+		const payload = {
+			output_config: { effort: "low" },
+			messages: [
+				{ role: "system", content: [], output_config: { effort: "low" } },
+				{ role: "system", content: [], output_config: { effort: "xhigh" } },
+			],
+		};
+		expect(applyFloor(payload, "medium")).toBeUndefined();
+		expect(payload.output_config.effort).toBe("medium");
+		expect(payload.messages.map(m => m.output_config.effort)).toEqual(["medium", "xhigh"]);
+	});
+
+	test("raises OpenAI configuration_update items in the input history", () => {
+		const update = { type: "configuration_update", reasoning: { effort: "low" } };
+		const payload = {
+			reasoning: { effort: "high" },
+			input: [{ type: "message", role: "user", content: "a" }, update],
+		};
+		expect(applyFloor(payload, "medium")).toEqual({ from: "low", to: "medium" });
+		expect(payload.reasoning.effort).toBe("high");
+		expect(update.reasoning.effort).toBe("medium");
+	});
 });
 
 describe("autoActive", () => {
